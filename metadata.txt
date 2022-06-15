@@ -1,0 +1,60 @@
+	Species	Genotype	Fragment	Temp	Time	Description	Date	Timeframe
+CD26	CNAT	CnD-26	0	26C	before 			
+CD26-3	CNAT	CnD-26	3	31C	after	Last remaining polyps from lesion	11/8/21	
+CD26-4	CNAT	CnD-26	4	31C	after	End of experiment	12/1/21	
+CD26-6	CNAT	CnD-26	6	21C	after	End of experiment	12/1/21	
+CD27	CNAT	CnD-27	0	26C	before			
+CD27-1	CNAT	CnD-27	1	26C	after	End of experiment	12/1/21	
+CD27-2	CNAT	CnD-27	2	21C	after	Last remaining polyps from lesion	11/2/21	Day 2 of experiment
+CD27-3	CNAT	CnD-27	3	31C	after	Last remaining polyps from lesion	11/8/21	
+CD27-4	CNAT	CnD-27	4	31C	after	Last remaining polyps from lesion	11/8/21	
+CD27-6	CNAT	CnD-27	6	21C	after	End of experiment	12/1/21	
+CD27-7	CNAT	CnD-27	7	26C	after	Last remaining polyps from lesion	11/17/21	
+CD28	CNAT	CnD-28	0	26C	before			
+CD28-1	CNAT	CnD-28	1	26C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD28-3	CNAT	CnD-28	3	31C	after		11/2/21	
+CD28-6	CNAT	CnD-28	6	21C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD28-7	CNAT	CnD-28	7	26C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD29	CNAT	CnD-29	0	26C	before			
+CD29-1	CNAT	CnD-29	1	26C	before	Last remaining polyps from lesion	10/30/21	2 days before experiment began
+CD29-3	CNAT	CnD-29	3	31C	after	Last remaining polyps from lesion	11/2/21	Day 2 of experiment
+CD29-4	CNAT	CnD-29	4	31C	after	Last remaining polyps from lesion	11/2/21	Day 2 of experiment
+CD29-6	CNAT	CnD-29	6	21C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD29-7	CNAT	CnD-29	7	26C	after	Last remaining polyps from lesion	11/2/21	Day 2 of experiment
+CD30	CNAT	CnD-30	0	26C	before			
+CD30-1	CNAT	CnD-30	1	26C	after	Last remaining polyps from lesion	11/7/21	
+CD30-2	CNAT	CnD-30	2	21C	after	Last remaining polyps from lesion	11/29/21	
+CD30-3	CNAT	CnD-30	3	31C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD30-6	CNAT	CnD-30	6	21C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD30-7	CNAT	CnD-30	7	26C	after	Last remaining polyps from lesion	11/1/21	First day of experiment
+CD31	CNAT	CnD-31	0	26C	before			
+CD31-1	CNAT	CnD-31	1	26C	after	Last remaining polyps from lesion	11/29/21	
+CD31-2	CNAT	CnD-31	2	21C	after	End of experiment	12/1/21	
+CD31-3	CNAT	CnD-31	3	31C	after	Last remaining polyps from lesion	11/4/21	
+CD31-4	CNAT	CnD-31	4	31C	after	Last remaining polyps from lesion	11/24/21	
+CD31-6	CNAT	CnD-31	6	21C	after	Last remaining polyps from lesion	11/10/21	
+CD31-7	CNAT	CnD-31	7	26C	after	Last remaining polyps from lesion	11/8/21	
+CD33	CNAT	CnD-33	0	26C	before	Lesion	1/24/22	
+CD34	CNAT	CnD-34	0	26C	before	Lesion	1/25/22	
+CD35	CNAT	CnD-35	0	26C	before	Lesion	1/24/22	
+MD77-2	MCAV	McD-77	2	31C	after	Last remaining polyp from lesion	9/20/21	End of the life of this frag in experiment
+MD77-5	MCAV	McD-77	5	31C	after	Last remaining polyp from lesion	9/11/21	End of the life of this frag in experiment
+MD79-1	MCAV	McD-79	1	21C	after	Last remaining polyp from lesion	9/14/21	End of the life of this frag in experiment
+MD79-HD	MCAV	McD-79	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD80-2	MCAV	McD-80	2	31C	after	Last remaining polyp from lesion	9/14/21	End of the life of this frag in experiment
+MD80-4	MCAV	McD-80	4	26C	after	Last remaining polyp from lesion	9/26/21	End of the life of this frag in experiment
+MD81-HD	MCAV	McD-81	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD82-3	MCAV	McD-82	3	26C	after	Last remaining polyp from lesion	10/8/21	End of the life of this frag in experiment
+MD82-HD	MCAV	McD-82	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD82-L	MCAV	McD-82	0	26C	before	Lesion	9/8/21	Sampled 2 days before experiment started
+MD83-5	MCAV	McD-83	5	31C	after	Last remaining polyp from lesion	10/13/21	End of the life of this frag in experiment
+MD83-HD	MCAV	McD-83	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD84-HD	MCAV	McD-84	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD85-4	MCAV	McD-85	4	26C	after	Last remaining polyp from lesion	9/20/21	End of the life of this frag in experiment
+MD85-5	MCAV	McD-85	5	31C	after	Last remaining polyp from lesion	9/14/21	End of the life of this frag in experiment
+MD85-HD	MCAV	McD-85	0	26C	before	Healthy portion of diseased fragment	9/8/21	Sampled 2 days before experiment started
+MD88	MCAV	McD-88	0	26C	before	Lesion	1/24/22	
+MD89	MCAV	McD-89	0	26C	before	Lesion	1/24/22	
+MD90	MCAV	McD-90	0	26C	before	Lesion	1/24/22	
+MD91	MCAV	McD-91	0	26C	before	Lesion	1/24/22	
+MD92	MCAV	McD-92	0	26C	before	Lesion	1/24/22	
