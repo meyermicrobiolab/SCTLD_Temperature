@@ -1,0 +1,616 @@
+---
+title: "SCTLD_temp"
+author: "JM"
+date: '2022-06-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries
+
+```{r, echo=FALSE}
+library(dada2)
+library(ShortRead)
+library(ggplot2)
+library(phyloseq)
+library(vegan)
+library(knitr)
+library(ALDEx2)
+library(CoDaSeq)
+library(zCompositions)
+library(igraph)
+library(car)
+library(grDevices)
+library(propr)
+library(cowplot)
+library(randomcoloR)
+library(dplyr)
+library(reshape2)
+library(tibble)
+library(exactRankTests)
+library(nlme)
+library(data.table)
+library(Rmisc)
+library(indicspecies)
+library(viridis)
+writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
+```
+
+## Quality-filter the sequencing reads and create Amplicon Sequence Variant (ASV) tables with DADA2
+
+Put unjoined R1 and R2 fastq files, with adaptors and primers previously removed with cutadapt into a directory for DADA2. Here, our forward and reverse fastq filenames have format: SAMPLENAME_R1_cut.fastq.gz and SAMPLENAME_R2_cut.fastq.gz
+
+
+```{r, echo=FALSE}
+path <- "~/Documents/Github/SCTLD_temp/cutadapt"
+list.files(path)
+fnFs <- sort(list.files(path, pattern="_R1_cut.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2_cut.fastq.gz", full.names = TRUE))
+sample.names <- sapply(strsplit(basename(fnFs), "-515"), `[`, 1)
+# Perform filtering and trimming
+filt_path <- file.path(path, "filtered") 
+filtFs <- file.path(filt_path, paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(filt_path, paste0(sample.names, "_R_filt.fastq.gz"))
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(150,150),
+                     maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+                     compress=TRUE, multithread=TRUE)
+head(out)
+# Learn the Error Rates, it TAKES TIME!
+errF <- learnErrors(filtFs, multithread=TRUE)
+errR <- learnErrors(filtRs, multithread=TRUE)
+plotErrors(errF, nominalQ=TRUE)
+# Dereplicate the filtered fastq files
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
+names(derepFs) <- sample.names
+names(derepRs) <- sample.names
+# Infer the sequence variants in each sample
+dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
+dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
+# Inspecting the dada-class object returned by dada:
+dadaFs[[1]]
+# Merge the denoised forward and reverse reads:
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+# Construct sequence table
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+#Remove chimeric sequences:
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+sum(seqtab.nochim)/sum(seqtab)
+# Inspect distribution of sequence lengths
+table(nchar(getSequences(seqtab)))
+# Track reads through the pipeline
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab))
+colnames(track) <- c("input", "filtered", "denoised", "merged", "tabled")
+rownames(track) <- sample.names
+head(track)
+write.table(track, "dada_read_stats.txt",sep="\t",col.names=NA)
+saveRDS(seqtab, "~/Documents/Github/SCTLD_temp/seqtab.rds") 
+```
+
+# Assign Taxonomy
+
+```{r, echo=FALSE}
+taxa <- assignTaxonomy(seqtab.nochim, "~/Documents/Github/silva_nr99_v138.1_train_set.fa.gz", multithread=TRUE)
+# FIX the NAs in the taxa table
+taxon <- as.data.frame(taxa,stringsAsFactors=FALSE)
+taxon$Phylum[is.na(taxon$Phylum)] <- taxon$Kingdom[is.na(taxon$Phylum)]
+taxon$Class[is.na(taxon$Class)] <- taxon$Phylum[is.na(taxon$Class)]
+taxon$Order[is.na(taxon$Order)] <- taxon$Class[is.na(taxon$Order)]
+taxon$Family[is.na(taxon$Family)] <- taxon$Order[is.na(taxon$Family)]
+taxon$Genus[is.na(taxon$Genus)] <- taxon$Family[is.na(taxon$Genus)]
+write.table(taxon,"silva_taxa_table.txt",sep="\t",col.names=NA)
+write.table(seqtab.nochim, "silva_otu_table.txt",sep="\t",col.names=NA)
+```
+
+# Create Phyloseq object and remove chloroplasts, mitochondria, eukaryotes
+
+```{r, echo=FALSE}
+# Create phyloseq object from otu and taxonomy tables from dada2, along with the sample metadata.
+otu <- read.table("silva_otu_table.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_taxa_table.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+ps #2602 taxa and 59 samples
+# remove chloroplasts and mitochondria and Eukaryota
+get_taxa_unique(ps, "Family") 
+get_taxa_unique(ps, "Order") 
+get_taxa_unique(ps, "Kingdom") 
+ps <- subset_taxa(ps, Family !="Mitochondria")
+ps <- subset_taxa(ps, Order !="Chloroplast")
+ps <- subset_taxa(ps, Kingdom !="Eukaryota")
+ps <- subset_taxa(ps, Kingdom !="NA")
+get_taxa_unique(ps, "Family") 
+get_taxa_unique(ps, "Order") 
+get_taxa_unique(ps, "Kingdom") 
+ps #2514 taxa and 59 samples
+# Now export cleaned otu and taxa tables from phyloseq for future reference
+otu = as(otu_table(ps), "matrix")
+taxon = as(tax_table(ps), "matrix")
+metadata = as(sample_data(ps), "matrix")
+write.table(otu,"silva_nochloronomito_otu_table.txt",sep="\t",col.names=NA)
+write.table(taxon,"silva_nochloronomito_taxa_table.txt",sep="\t",col.names=NA)
+# export ASV table as relative abundance
+ps_ra<-transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+otu_ra = as(otu_table(ps_ra), "matrix")
+write.table(otu_ra,"silva_nochloronomito_otu_table_RA.txt",sep="\t",col.names=NA)
+```
+
+# Inspect data and remove low abundance taxa
+
+```{r, echo=FALSE}
+otu <- read.table("silva_nochloronomito_otu_table.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+ps #2514 taxa and 59 samples
+get_taxa_unique(ps, "Order") #223
+get_taxa_unique(ps, "Class") #89
+ps5<-filter_taxa(ps, function(x) mean(x) >5, TRUE)
+ntaxa(ps5) #251
+ps2<-filter_taxa(ps, function(x) mean(x) >2, TRUE)
+ntaxa(ps2) #411
+ps1<-filter_taxa(ps, function(x) mean(x) >1, TRUE)
+ntaxa(ps1) #610
+get_taxa_unique(ps, "Genus") #687
+get_taxa_unique(ps5, "Genus") #123
+get_taxa_unique(ps5, "Family") #78
+get_taxa_unique(ps2, "Genus") #195
+get_taxa_unique(ps2, "Family") #114
+
+# export filtered dataset
+otu = as(otu_table(ps2), "matrix")
+taxon = as(tax_table(ps2), "matrix")
+metadata = as(sample_data(ps2), "matrix")
+write.table(otu,"silva_nochloronomito_otu_table_ps2.txt",sep="\t",col.names=NA)
+write.table(taxon,"silva_nochloronomito_taxa_table_ps2.txt",sep="\t",col.names=NA)
+# export ASV table as relative abundance
+ps2_ra<-transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
+otu2_ra = as(otu_table(ps2_ra), "matrix")
+write.table(otu2_ra,"silva_nochloronomito_otu_table_ps2_RA.txt",sep="\t",col.names=NA)
+
+otu = as(otu_table(ps5), "matrix")
+taxon = as(tax_table(ps5), "matrix")
+metadata = as(sample_data(ps5), "matrix")
+write.table(otu,"silva_nochloronomito_otu_table_ps5.txt",sep="\t",col.names=NA)
+write.table(taxon,"silva_nochloronomito_taxa_table_ps5.txt",sep="\t",col.names=NA)
+# export ASV table as relative abundance
+ps5_ra<-transform_sample_counts(ps5, function(OTU) OTU/sum(OTU))
+otu5_ra = as(otu_table(ps5_ra), "matrix")
+write.table(otu5_ra,"silva_nochloronomito_otu_table_ps2_RA.txt",sep="\t",col.names=NA)
+```
+
+# Perform center-log-ratio transformation on ASVs and calculate Aitchison Distance and principal components
+
+```{r, echo=FALSE}
+# READ IN OTU data that has been filtered for very low abundance sequences
+otu <- read.table("silva_nochloronomito_otu_table_ps2.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps2.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps2 <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+ps2 #411 taxa and 59 samples
+
+# First, replace 0 values with an estimate (because normalization is taking log, can't have 0)
+# Also transposing here, need samples as rows
+d.czm <- cmultRepl(t(otu), method="CZM", label=0)
+# Perform the center-log-ratio (CLR) transformation 
+d.clr <- codaSeq.clr(d.czm)
+# transpose matrix of CLR transformed data for ordination and dendrogram
+E.clr <- t(d.clr)
+# plot compositional PCA biplot (perform a singular value decomposition)
+d.pcx <- prcomp(E.clr)
+# calculate percent variance explained for the axis labels
+pc1 <- round(d.pcx$sdev[1]^2/sum(d.pcx$sdev^2),2)
+pc2 <- round(d.pcx$sdev[2]^2/sum(d.pcx$sdev^2),2)
+xlab <- paste("PC1: ", pc1, sep="")
+ylab <- paste("PC2: ", pc2, sep="")
+biplot(d.pcx, cex=c(0.6,0.4), var.axes=F,scale=1, xlab=xlab, ylab=ylab)
+summary(d.pcx)
+str(d.pcx)
+screeplot(d.pcx)
+
+# Make a pretty PCA plot with ggplot
+df_out <- as.data.frame(d.pcx$x)
+theme_set(theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank()))
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+
+pdf("PCA_all_temp.pdf",bg ="white",width=8.5)
+p<-ggplot(df_out,aes(x=PC1,y=PC2,fill=samples$Temp,shape=samples$Species))
+p<-p+geom_point(size=5)+
+  theme(axis.title = element_text(size=14))+
+  theme(axis.text=element_text(size=12))+
+  theme(legend.title = element_text(size=14))+
+  theme(legend.text = element_text(size=12))+
+  scale_shape_manual(values=c(21,22))+
+  scale_fill_manual(values=cols)+
+  guides(fill = guide_legend(override.aes=list(shape=21)))
+p + labs(x=xlab, y=ylab, fill="Temperature",shape="Species") + coord_fixed()
+dev.off()
+
+
+####### Use phyloseq/vegan to perform PERMANOVA
+# set metadata as factors
+temp<-as.character(samples$Temp)
+spp<-as.character(samples$Species)
+
+# permanova between groups using Aitchison distance
+dist.clr <- dist(E.clr)
+perm<-adonis2(dist.clr~temp*spp,as(sample_data(ps2),"data.frame"))
+print(perm)
+
+```
+
+# Separate coral species for independent PCAs
+
+```{r, echo=FALSE}
+# Separate coral species
+otu <- read.table("silva_nochloronomito_otu_table_ps2.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps2.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+ps #411 taxa and 59 samples
+cnat<-subset_samples(ps, Species=="CNAT")
+cnat #411 taxa and 38 samples
+# remove taxa not found in cnat
+cnat <- prune_taxa(taxa_sums(cnat) > 0, cnat) 
+cnat #369 taxa and 38 samples
+otu = as(otu_table(cnat), "matrix")
+taxon = as(tax_table(cnat), "matrix")
+metadata = as(sample_data(cnat), "matrix")
+write.table(otu,"silva_nochloronomito_otu_table_ps2_CNAT.txt",sep="\t",col.names=NA)
+write.table(taxon,"silva_nochloronomito_taxa_table_ps2_CNAT.txt",sep="\t",col.names=NA)
+write.table(metadata,"metadata_ps2_CNAT.txt",sep="\t",col.names=NA)
+
+ps #411 taxa and 59 samples
+mcav<-subset_samples(ps, Species=="MCAV")
+mcav #411 taxa and 21 samples
+# remove taxa not found in mcav
+mcav <- prune_taxa(taxa_sums(mcav) > 0, mcav) 
+mcav #214 taxa and 21 samples
+otu = as(otu_table(mcav), "matrix")
+taxon = as(tax_table(mcav), "matrix")
+metadata = as(sample_data(mcav), "matrix")
+write.table(otu,"silva_nochloronomito_otu_table_ps2_MCAV.txt",sep="\t",col.names=NA)
+write.table(taxon,"silva_nochloronomito_taxa_table_ps2_MCAV.txt",sep="\t",col.names=NA)
+write.table(metadata,"metadata_ps2_MCAV.txt",sep="\t",col.names=NA)
+```
+
+
+# PCA with CNAT
+
+```{r, echo=FALSE}
+otu <- read.table("silva_nochloronomito_otu_table_ps2_CNAT.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps2_CNAT.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata_ps2_CNAT.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+cnat <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+cnat #369 taxa and 38 samples
+
+d.czm <- cmultRepl(t(otu), method="CZM", label=0)
+d.clr <- codaSeq.clr(d.czm)
+E.clr <- t(d.clr)
+d.pcx <- prcomp(E.clr)
+pc1 <- round(d.pcx$sdev[1]^2/sum(d.pcx$sdev^2),2)
+pc2 <- round(d.pcx$sdev[2]^2/sum(d.pcx$sdev^2),2)
+xlab <- paste("PC1: ", pc1, sep="")
+ylab <- paste("PC2: ", pc2, sep="")
+biplot(d.pcx, cex=c(0.6,0.4), var.axes=F,scale=1, xlab=xlab, ylab=ylab)
+summary(d.pcx)
+str(d.pcx)
+screeplot(d.pcx)
+
+# Make a pretty PCA plot with ggplot
+df_out <- as.data.frame(d.pcx$x)
+theme_set(theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank()))
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+
+pdf("PCA_CNAT_temp.pdf",bg ="white",width=8.5)
+p<-ggplot(df_out,aes(x=PC1,y=PC2,color=samples$Temp))
+p<-p+geom_point(size=5)+
+  theme(axis.title = element_text(size=14))+
+  theme(axis.text=element_text(size=12))+
+  theme(legend.title = element_text(size=14))+
+  theme(legend.text = element_text(size=12))+
+  scale_color_manual(values=cols)
+p + labs(x=xlab, y=ylab, color="Temperature") + coord_fixed()
+dev.off()
+
+####### Use phyloseq/vegan to perform ANOSIM/PERMANOVA
+# set metadata as factors for anosim
+temp<-as.character(samples$Temp)
+
+# anosim between groups using Aitchison distance
+dist.clr <- dist(E.clr)
+ano <- anosim(dist.clr, temp, permutations=999)
+pdf("ANOSIM_CNAT_temp.pdf",width=8.5)
+plot(ano)
+dev.off()
+
+
+```
+
+# PCA with MCAV
+
+```{r, echo=FALSE}
+otu <- read.table("silva_nochloronomito_otu_table_ps2_MCAV.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps2_MCAV.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata_ps2_MCAV.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+mcav <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+mcav #214 taxa and 21 samples
+
+d.czm <- cmultRepl(t(otu), method="CZM", label=0)
+d.clr <- codaSeq.clr(d.czm)
+E.clr <- t(d.clr)
+d.pcx <- prcomp(E.clr)
+pc1 <- round(d.pcx$sdev[1]^2/sum(d.pcx$sdev^2),2)
+pc2 <- round(d.pcx$sdev[2]^2/sum(d.pcx$sdev^2),2)
+xlab <- paste("PC1: ", pc1, sep="")
+ylab <- paste("PC2: ", pc2, sep="")
+biplot(d.pcx, cex=c(0.6,0.4), var.axes=F,scale=1, xlab=xlab, ylab=ylab)
+summary(d.pcx)
+str(d.pcx)
+screeplot(d.pcx)
+
+# Make a pretty PCA plot with ggplot
+df_out <- as.data.frame(d.pcx$x)
+theme_set(theme_bw()+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank()))
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+
+pdf("PCA_MCAV_temp.pdf",bg ="white",width=8.5)
+p<-ggplot(df_out,aes(x=PC1,y=PC2,color=samples$Temp))
+p<-p+geom_point(size=5)+
+  theme(axis.title = element_text(size=14))+
+  theme(axis.text=element_text(size=12))+
+  theme(legend.title = element_text(size=14))+
+  theme(legend.text = element_text(size=12))+
+  scale_color_manual(values=cols)
+p + labs(x=xlab, y=ylab, color="Temperature") + coord_fixed()
+dev.off()
+
+
+####### Use phyloseq/vegan to perform ANOSIM/PERMANOVA
+# set metadata as factors for anosim
+temp<-as.character(samples$Temp)
+
+# anosim between groups using Aitchison distance
+dist.clr <- dist(E.clr)
+ano <- anosim(dist.clr, temp, permutations=999)
+pdf("ANOSIM_MCAV_temp.pdf",width=8.5)
+plot(ano)
+dev.off()
+
+```
+
+# Beta diversity dispersion on full dataset
+
+```{r, echo=FALSE}
+temp<-as.character(samples$Temp)
+spp<-as.character(samples$Species)
+#calculate multivariate dispersions based on temperature
+dist.clr <- dist(E.clr)
+mod <-betadisper(dist.clr, temp)
+#one way anova
+anova(mod)
+#boxplots
+plot(mod)
+boxplot(mod)
+
+## Compute mean distance to centroid per group
+#this just prints values on the console
+tapply(mod$distances, temp, mean)
+## Same, but variance instead
+tapply(mod$distances, temp, var)
+
+#Get the distances to centroid from the model
+mod$distances
+dis <- mod$distances
+#melt
+dis.melt <- reshape2::melt(dis)
+#move rownames to columns so we can merge the dispersion values and metadata
+dis.melt$Sample <- rownames(dis.melt)
+samples$Sample <- rownames(samples)
+#merge metadata and dispersion 
+dis.treat <- merge(samples, dis.melt)
+#rename column
+colnames(dis.treat)[10] <- "distance"
+
+#run linear model to test significance
+distlm <-lm(distance~Temp, data=dis.treat)
+summary(distlm)
+anova(distlm)
+
+# plot average dispersion by group, with all points shown    
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+dis.treat$Species<-factor(dis.treat$Species, levels=c("CNAT","MCAV"))
+pdf("DistanceToCentroid.pdf",bg ="white",width=8.5)
+p2<-ggplot(dis.treat,aes(x=Species,y=distance))+
+  geom_boxplot()+
+  geom_jitter(position=position_jitter(width=.1, height=0),aes(color=Temp),size=3)+
+  scale_color_manual(values=cols)+
+  theme(axis.title.x=element_blank())+
+  theme(text=element_text(size=16))+
+  theme(legend.title = element_text(size=14))+
+  theme(legend.text = element_text(size=12))+
+  ylab("Distance to Centroid")
+p2
+dev.off()
+
+theme(axis.title = element_text(size=14))+
+  theme(axis.text=element_text(size=12))+
+
+
+```
+
+# Bar charts
+
+```{r, echo=FALSE}
+otu <- read.table("silva_nochloronomito_otu_table_ps5.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps5.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps5 <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
+ps5 #251 taxa and 59 samples
+ps5_ra<-transform_sample_counts(ps5, function(OTU) OTU/sum(OTU))
+ps5_ra #251 taxa and 59 samples
+cnat<-subset_samples(ps5_ra, Species=="CNAT")
+cnat #251 taxa and 38 samples
+
+get_taxa_unique(cnat, "Order") #51
+get_taxa_unique(cnat, "Class") #25
+get_taxa_unique(cnat, "Family") #78
+n <- 25
+palette <- distinctColorPalette(n)
+#you can rerun the previous line to get a new selection of colors
+# keep list of colors used in palette that is most appealing
+sink("palette.txt")
+print(palette)
+sink()
+
+pdf("barchart_CNAT_Class.pdf",width=11)
+p1=plot_bar(cnat, fill="Class")+
+  geom_bar(aes(fill=Class), stat="identity",position="stack")+
+  facet_grid(.~Temp,scales="free",space="free")+
+  theme(strip.text=element_text(face="bold"))+
+  theme(axis.text.x=element_text(angle = 90))+
+  scale_fill_manual(values=palette)+
+  theme(plot.title = element_text(face="italic"))+
+  theme(axis.title.x = element_blank())+
+  theme(legend.position = "bottom")
+p1
+dev.off()
+
+```
+
+
+
+
+```{r, echo=FALSE}
+ps2 #411 taxa and 59 samples
+dat <- tax_glom(ps2, taxrank = "Genus")
+datm <- psmelt(dat)
+datc <- reshape2::dcast(datm, Sample + Species + Genotype + Fragment + Temp + Time + Description + Date + Timeframe ~ Genus, value.var = 'Abundance', fun.aggregate = sum)
+dim(datc)
+datc_relabund <-  sweep(datc[,10:204], 1, rowSums(datc[,10:204]), '/')
+datc_relnames <- cbind(datc[,1:9],datc_relabund)
+vibrio <- select(datc_relnames, Sample,Species,Genotype,Fragment,Temp,Time,Description,Date,Timeframe, Vibrio)
+names(vibrio)[4] <- 'Proportion'
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+cols2<-c("CNAT"="#999999","MCAV"="#000000")
+
+pdf("Vibrio_byTemp.pdf",width=8.5)
+p <- ggplot(vibrio, aes(x=Species, y=Proportion))+
+  geom_boxplot(outlier.shape=NA)+
+  geom_jitter(position=position_jitter(width=.1,height=0),aes(color=Temp),size=3)+
+  theme_bw()+
+  #coord_flip()+
+  scale_color_manual(values=cols)+
+  theme(axis.title.x=element_blank())+
+  theme(text=element_text(size=14))+
+  theme(strip.text.y=element_text(size=14))+
+  ylab("Relative Abundance of Vibrios")
+p
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, echo=FALSE}
+ps2_ra<-transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
+vibrio<-subset_taxa(ps2_ra, Genus=="Vibrio")
+vibrio #8 taxa and 59 samples
+otu.vib = as(otu_table(vibrio), "matrix")
+otu.vib<-as.data.frame(otu.vib)
+otu.vib<-rownames_to_column(otu.vib,var="Sample")
+#export ASV sequences for supplemental table
+write.table(otu.vib,"Vibrio_ASVs.txt",sep="\t",col.names=NA)
+names(otu.vib)[2]<-"ASV1"
+names(otu.vib)[3]<-"ASV2"
+names(otu.vib)[4]<-"ASV3"
+names(otu.vib)[5]<-"ASV4"
+names(otu.vib)[6]<-"ASV5"
+names(otu.vib)[7]<-"ASV6"
+names(otu.vib)[8]<-"ASV7"
+names(otu.vib)[9]<-"ASV8"
+meta.vib = as(sample_data(vibrio), "matrix")
+meta.vib<-as.data.frame(meta.vib)
+meta.vib<-rownames_to_column(meta.vib,var="Sample")
+otu.vib.meta<-merge(meta.vib,otu.vib,"Sample")
+otu_long_p<-reshape2::melt(otu.vib.meta,id.vars=c("Sample","Species","Genotype","Fragment","Temp","Time","Description","Date","Timeframe"),variable.name="ASV",value.name="Proportion")
+
+cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
+cols2<-c("CNAT"="#999999","MCAV"="#000000")
+
+otu_long_p_ASV <- otu_long_p %>% group_by(Temp,ASV) %>% summarize(ASV_mean=mean(Proportion))
+
+pdf("Vibrio_ASVs.pdf",bg = "white",width=8,height=5)
+p1<-ggplot(otu_long_p_ASV,aes(ASV,treatment,color=ASV))+
+  geom_point(aes(size=ASV_mean))+
+  theme_bw()+
+  scale_size(range = c(0.5,10),name="Mean Relative Abundance")+
+  scale_color_viridis(discrete=TRUE)+
+  #scale_color_manual(values=pseudoalt_colors)+
+  guides(color=FALSE)+  #removes the legend for the colors
+  theme(axis.text.x=element_text(size=10,angle=90,hjust=1,vjust=0,color="black"))+
+  theme(axis.text.y=element_text(size=12,color="black"))+
+  theme(axis.title.x=element_blank())+
+  theme(axis.title.y=element_blank())
+p1
+dev.off()
+```
+
