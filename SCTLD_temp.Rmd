@@ -428,14 +428,19 @@ dev.off()
 ```{r, echo=FALSE}
 temp<-as.character(samples$Temp)
 spp<-as.character(samples$Species)
+time<-as.character(samples$Time)
+
 #calculate multivariate dispersions based on temperature
 dist.clr <- dist(E.clr)
 mod <-betadisper(dist.clr, temp)
-#one way anova
 anova(mod)
-#boxplots
 plot(mod)
 boxplot(mod)
+
+mod2 <-betadisper(dist.clr, time)
+anova(mod2)
+plot(mod2)
+boxplot(mod2)
 
 ## Compute mean distance to centroid per group
 #this just prints values on the console
@@ -464,7 +469,8 @@ anova(distlm)
 # plot average dispersion by temp, with all points shown    
 cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
 cols2<-c("CNAT"="#999999","MCAV"="#000000")
-dis.treat$Species<-factor(dis.treat$Species, levels=c("CNAT","MCAV"))
+vibrio$Time<-factor(vibrio$Time, levels=c("before","after"))
+
 pdf("DistanceToCentroid_temp.pdf",bg ="white",width=8.5)
 p2<-ggplot(dis.treat,aes(x=Temp,y=distance))+
   geom_boxplot()+
@@ -478,9 +484,19 @@ p2<-ggplot(dis.treat,aes(x=Temp,y=distance))+
 p2
 dev.off()
 
-theme(axis.title = element_text(size=14))+
-  theme(axis.text=element_text(size=12))+
 
+pdf("DistanceToCentroid_before-after.pdf",bg ="white",width=8.5)
+p3<-ggplot(dis.treat,aes(x=Time,y=distance))+
+  geom_boxplot()+
+  geom_jitter(position=position_jitter(width=.1, height=0),aes(color=Species),size=3)+
+  scale_color_manual(values=cols2)+
+  theme(axis.title.x=element_blank())+
+  theme(text=element_text(size=16))+
+  theme(legend.title = element_text(size=14))+
+  theme(legend.text = element_text(size=12))+
+  ylab("Distance to Centroid")
+p3
+dev.off()
 
 ```
 
