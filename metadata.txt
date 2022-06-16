@@ -1,5 +1,5 @@
 	Species	Genotype	Fragment	Temp	Time	Description	Date	Timeframe
-CD26	CNAT	CnD-26	0	26C	before 			
+CD26	CNAT	CnD-26	0	26C	before			
 CD26-3	CNAT	CnD-26	3	31C	after	Last remaining polyps from lesion	11/8/21	
 CD26-4	CNAT	CnD-26	4	31C	after	End of experiment	12/1/21	
 CD26-6	CNAT	CnD-26	6	21C	after	End of experiment	12/1/21	

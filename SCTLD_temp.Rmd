@@ -276,11 +276,11 @@ OTU = otu_table(otu, taxa_are_rows=FALSE)
 taxon<-as.matrix(taxon)
 TAX = tax_table(taxon)
 sampledata = sample_data(samples)
-ps <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+ps2 <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
                sample_data(samples), 
                tax_table(taxon))
-ps #411 taxa and 59 samples
-cnat<-subset_samples(ps, Species=="CNAT")
+ps2 #411 taxa and 59 samples
+cnat<-subset_samples(ps2, Species=="CNAT")
 cnat #411 taxa and 38 samples
 # remove taxa not found in cnat
 cnat <- prune_taxa(taxa_sums(cnat) > 0, cnat) 
@@ -292,8 +292,8 @@ write.table(otu,"silva_nochloronomito_otu_table_ps2_CNAT.txt",sep="\t",col.names
 write.table(taxon,"silva_nochloronomito_taxa_table_ps2_CNAT.txt",sep="\t",col.names=NA)
 write.table(metadata,"metadata_ps2_CNAT.txt",sep="\t",col.names=NA)
 
-ps #411 taxa and 59 samples
-mcav<-subset_samples(ps, Species=="MCAV")
+ps2 #411 taxa and 59 samples
+mcav<-subset_samples(ps2, Species=="MCAV")
 mcav #411 taxa and 21 samples
 # remove taxa not found in mcav
 mcav <- prune_taxa(taxa_sums(mcav) > 0, mcav) 
@@ -532,6 +532,16 @@ dev.off()
 
 
 ```{r, echo=FALSE}
+otu <- read.table("silva_nochloronomito_otu_table_ps2.txt",sep="\t",header=TRUE, row.names=1)
+taxon <- read.table("silva_nochloronomito_taxa_table_ps2.txt",sep="\t",header=TRUE,row.names=1)
+samples<-read.table("metadata.txt",sep="\t",header=T,row.names=1)
+OTU = otu_table(otu, taxa_are_rows=FALSE)
+taxon<-as.matrix(taxon)
+TAX = tax_table(taxon)
+sampledata = sample_data(samples)
+ps2 <- phyloseq(otu_table(otu, taxa_are_rows=FALSE), 
+               sample_data(samples), 
+               tax_table(taxon))
 ps2 #411 taxa and 59 samples
 dat <- tax_glom(ps2, taxrank = "Genus")
 datm <- psmelt(dat)
@@ -540,16 +550,15 @@ dim(datc)
 datc_relabund <-  sweep(datc[,10:204], 1, rowSums(datc[,10:204]), '/')
 datc_relnames <- cbind(datc[,1:9],datc_relabund)
 vibrio <- select(datc_relnames, Sample,Species,Genotype,Fragment,Temp,Time,Description,Date,Timeframe, Vibrio)
-names(vibrio)[4] <- 'Proportion'
+names(vibrio)[10] <- 'Proportion'
 cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
 cols2<-c("CNAT"="#999999","MCAV"="#000000")
 
-pdf("Vibrio_byTemp.pdf",width=8.5)
+pdf("Vibrio_bySpecies.pdf",width=8.5)
 p <- ggplot(vibrio, aes(x=Species, y=Proportion))+
   geom_boxplot(outlier.shape=NA)+
   geom_jitter(position=position_jitter(width=.1,height=0),aes(color=Temp),size=3)+
   theme_bw()+
-  #coord_flip()+
   scale_color_manual(values=cols)+
   theme(axis.title.x=element_blank())+
   theme(text=element_text(size=14))+
@@ -557,60 +566,46 @@ p <- ggplot(vibrio, aes(x=Species, y=Proportion))+
   ylab("Relative Abundance of Vibrios")
 p
 dev.off()
-```
 
-
-
-
-
-
-
-
-
-
-
-
-```{r, echo=FALSE}
-ps2_ra<-transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
-vibrio<-subset_taxa(ps2_ra, Genus=="Vibrio")
-vibrio #8 taxa and 59 samples
-otu.vib = as(otu_table(vibrio), "matrix")
-otu.vib<-as.data.frame(otu.vib)
-otu.vib<-rownames_to_column(otu.vib,var="Sample")
-#export ASV sequences for supplemental table
-write.table(otu.vib,"Vibrio_ASVs.txt",sep="\t",col.names=NA)
-names(otu.vib)[2]<-"ASV1"
-names(otu.vib)[3]<-"ASV2"
-names(otu.vib)[4]<-"ASV3"
-names(otu.vib)[5]<-"ASV4"
-names(otu.vib)[6]<-"ASV5"
-names(otu.vib)[7]<-"ASV6"
-names(otu.vib)[8]<-"ASV7"
-names(otu.vib)[9]<-"ASV8"
-meta.vib = as(sample_data(vibrio), "matrix")
-meta.vib<-as.data.frame(meta.vib)
-meta.vib<-rownames_to_column(meta.vib,var="Sample")
-otu.vib.meta<-merge(meta.vib,otu.vib,"Sample")
-otu_long_p<-reshape2::melt(otu.vib.meta,id.vars=c("Sample","Species","Genotype","Fragment","Temp","Time","Description","Date","Timeframe"),variable.name="ASV",value.name="Proportion")
-
-cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
-cols2<-c("CNAT"="#999999","MCAV"="#000000")
-
-otu_long_p_ASV <- otu_long_p %>% group_by(Temp,ASV) %>% summarize(ASV_mean=mean(Proportion))
-
-pdf("Vibrio_ASVs.pdf",bg = "white",width=8,height=5)
-p1<-ggplot(otu_long_p_ASV,aes(ASV,treatment,color=ASV))+
-  geom_point(aes(size=ASV_mean))+
+#alternate view
+pdf("Vibrio_byTemp.pdf",width=8.5)
+p2 <- ggplot(vibrio, aes(x=Temp, y=Proportion))+
+  geom_boxplot(outlier.shape=NA)+
+  geom_jitter(position=position_jitter(width=.1,height=0),aes(color=Species),size=3)+
   theme_bw()+
-  scale_size(range = c(0.5,10),name="Mean Relative Abundance")+
-  scale_color_viridis(discrete=TRUE)+
-  #scale_color_manual(values=pseudoalt_colors)+
-  guides(color=FALSE)+  #removes the legend for the colors
-  theme(axis.text.x=element_text(size=10,angle=90,hjust=1,vjust=0,color="black"))+
-  theme(axis.text.y=element_text(size=12,color="black"))+
+  scale_color_manual(values=cols2)+
   theme(axis.title.x=element_blank())+
-  theme(axis.title.y=element_blank())
-p1
+  theme(text=element_text(size=14))+
+  theme(strip.text.y=element_text(size=14))+
+  ylab("Relative Abundance of Vibrios")
+p2
 dev.off()
+
+
+#alternate view
+pdf("Vibrio_before-after.pdf",width=8.5)
+p3 <- ggplot(vibrio, aes(x=Time, y=Proportion))+
+  geom_boxplot(outlier.shape=NA)+
+  geom_jitter(position=position_jitter(width=.1,height=0),aes(color=Temp),size=3)+
+  theme_bw()+
+  scale_color_manual(values=cols)+
+  theme(axis.title.x=element_blank())+
+  theme(text=element_text(size=14))+
+  theme(strip.text.y=element_text(size=14))+
+  ylab("Relative Abundance of Vibrios")
+p3
+dev.off()
+
+
 ```
+
+
+
+
+
+
+
+
+
+
 
