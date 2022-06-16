@@ -553,6 +553,7 @@ vibrio <- select(datc_relnames, Sample,Species,Genotype,Fragment,Temp,Time,Descr
 names(vibrio)[10] <- 'Proportion'
 cols<-c("21C"="#0072B2","26C"="#56B4E9","31C"="#E69F00")
 cols2<-c("CNAT"="#999999","MCAV"="#000000")
+vibrio$Time<-factor(vibrio$Time, levels=c("before","after"))
 
 pdf("Vibrio_bySpecies.pdf",width=8.5)
 p <- ggplot(vibrio, aes(x=Species, y=Proportion))+
